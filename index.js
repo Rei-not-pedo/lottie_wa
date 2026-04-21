@@ -7,7 +7,6 @@ async function startBot() {
     
     const sock = makeWASocket({
         auth: state,
-        printQRInTerminal: true,
         browser: ["Bot Cloud", "Chrome", "1.0.0"]
     });
 
