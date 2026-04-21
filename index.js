@@ -1,47 +1,68 @@
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
-const qrcode = require('qrcode-terminal');
-const pino = require('pino');
+// Import Module
+const { makeWASocket, useMultiFileAuthState } = require("@whiskeysockets/baileys")
+const pino = require("pino")
+const chalk = require("chalk")
+const readline = require("readline")
+const { resolve } = require("path")
+const { version } = require("os")
 
-async function startBot() {
-    // Folder 'session' untuk menyimpan login agar tidak scan QR terus
-    const { state, saveCreds } = await useMultiFileAuthState('session');
-    
-    const sock = makeWASocket({
-        auth: state,
-        logger: pino({ level: 'silent' }), // Mematikan log sampah agar QR terlihat jelas
-        browser: ["Ubuntu", "Chrome", "20.0.0"] 
-    });
+// Metode Pairing
+// True = Pairing Code || False = Scan QR
+const usePairingCode = true
 
-    sock.ev.on('creds.update', saveCreds);
+// prompt Input Terminal
+async function question(promt) {
+    process.stdout.write(promt)
+    const r1 = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+    })
 
-    sock.ev.on('connection.update', (update) => {
-    const { connection, lastDisconnect, qr } = update;
-    
-    // Log semua update untuk debugging
-    console.log("Update koneksi:", connection); 
-    
-    if (qr) {
-        console.log("QR Code diterima! Silakan scan di bawah:");
-        qrcode.generate(qr, { small: true });
-    }
-
-    if (connection === 'close') {
-        const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== 401;
-        console.log('Koneksi terputus, mencoba menyambung kembali...', shouldReconnect);
-        if (shouldReconnect) {
-            // Panggil kembali fungsi untuk memulai koneksi baru
-            startBot();
-        }
-    } else if (connection === 'open') {
-        console.log('BOT BERHASIL TERHUBUNG!');
-    }
-});
-    // Handler pesan (opsional)
-    sock.ev.on('messages.upsert', async m => {
-        const msg = m.messages[0];
-        if (!msg.message || msg.key.fromMe) return;
-        console.log('Ada pesan masuk dari:', msg.key.remoteJid);
-    });
+    return new Promise((resolve) => r1.question("", (ans) => {
+        r1.close()
+        resolve(ans)
+    }))
 }
 
-startBot();
+// Koneksi WhatsApp
+async function connectToWhatsApp() {
+    console.log(chalk.blue("🎁 Memulai Koneksi Ke WhatsApp"))
+
+    // Menyimpan Sesi Login
+    // LenwySesi Menjadi Penyimpanan Sesi Login
+    const { state, saveCreds } = await useMultiFileAuthState("./LenwySesi")
+
+    // Membuat Koneksi WhatsApp
+    const lenwy = makeWASocket({
+        logger: pino({ level: "silent" }),
+        printQRInTerminal: !usePairingCode,
+        auth: state, // Pakai Sesi Yang Ada
+        browser: ["Ubuntu", "Chrome", "20.0.04"], // Simulasi Browser
+        version: [2, 3000, 1015901307] // Versi WhatsApp
+    })
+
+    // Metode Pairing Code
+    if (usePairingCode && !lenwy.authState.creds.registered) {
+        console.log(chalk.green("☘ Masukkan Nomor Dengan Awal 62"))
+        const phoneNumber = await question("> ")
+        const code = await lenwy.requestPairingCode(phoneNumber.trim())
+        console.log(chalk.cyan(`🎁 Pairing Code : ${code}`))
+    }
+
+    // Menyimpan Sesi Login
+    lenwy.ev.on("creds.update", saveCreds)
+
+    // Informasi Koneksi
+    lenwy.ev.on("connection.update", (update) => {
+        const { connection, lastDisconnect } = update
+        if (connection === "close") {
+            console.log(chalk.red("❌ Koneksi Terputus, Mencoba Menyambung Ulang"))
+            connectToWhatsApp()
+        } else if (connection === "open") {
+            console.log(chalk.green("✓ Bot Berhasil Terhubung Ke WhatsApp"))
+        }
+    })
+}
+
+// Jalankan Koneksi WhatsApp
+connectToWhatsApp()
