@@ -15,23 +15,27 @@ async function startBot() {
     sock.ev.on('creds.update', saveCreds);
 
     sock.ev.on('connection.update', (update) => {
-        const { connection, lastDisconnect, qr } = update;
-        
-        // Tampilkan QR di log server jika bot belum login
-        if (qr) {
-            console.log("--- SCAN QR CODE DI BAWAH INI ---");
-            qrcode.generate(qr, { small: true });
-        }
+    const { connection, lastDisconnect, qr } = update;
+    
+    // Log semua update untuk debugging
+    console.log("Update koneksi:", connection); 
+    
+    if (qr) {
+        console.log("QR Code diterima! Silakan scan di bawah:");
+        qrcode.generate(qr, { small: true });
+    }
 
-        if (connection === 'close') {
-            const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-            console.log('Koneksi terputus, mencoba menyambung kembali...', shouldReconnect);
-            if (shouldReconnect) startBot();
-        } else if (connection === 'open') {
-            console.log('BOT BERHASIL TERHUBUNG!');
+    if (connection === 'close') {
+        const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== 401;
+        console.log('Koneksi terputus, mencoba menyambung kembali...', shouldReconnect);
+        if (shouldReconnect) {
+            // Panggil kembali fungsi untuk memulai koneksi baru
+            startBot();
         }
-    });
-
+    } else if (connection === 'open') {
+        console.log('BOT BERHASIL TERHUBUNG!');
+    }
+});
     // Handler pesan (opsional)
     sock.ev.on('messages.upsert', async m => {
         const msg = m.messages[0];
